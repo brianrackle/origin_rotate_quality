@@ -9,6 +9,7 @@
 #include <chrono>
 #include <functional>
 #include <fstream>
+#include <cstdarg>
 
 struct Coord2D
 {
@@ -60,6 +61,33 @@ __forceinline std::string dts(double_t d)
 __forceinline std::string cts(Coord2D const& vector)
 {
 	return dts(vector.x) + " , " + dts(vector.y);
+}
+
+__forceinline void TableHeader(std::ofstream & file, char const* format, char const* header...)
+{
+	va_list args;
+	va_start(args, format);
+	for (char const* pos = format; *pos; ++pos)
+		file << "| " << va_arg(args, char const*) << " ";
+	file << "|\n";
+	va_end(args);
+
+	for (char const* pos = format; *pos; ++pos)
+		switch (*pos)
+		{
+		case 'l':
+			file << "|:--- ";
+			break;
+		case 'r':
+			file << "| ---:";
+			break;
+		case 'c':
+			file << "|:---:";
+			break;
+		default:
+			break;
+		}
+	file << "|\n";
 }
 
 #define RADIAN_FRACTION 1.0e-2
@@ -118,9 +146,11 @@ int _tmain(int argc, _TCHAR* argv[])
 			}
 			return time::now() - start;
 		};
+
 		outfile << "# Vector Rotation\n";
 
-		tableHeader(outfile, "Dot");
+		outfile << "## " << "Dot Results\n";
+		TableHeader(outfile, "lr", "Vector", "Radians");
 		outfile << "### Duration: " << rotationIterator([&](Coord2D const& vector)
 		{ 
 			outfile << "|"
