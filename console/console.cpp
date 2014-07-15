@@ -94,19 +94,13 @@ __forceinline void TableHeader(std::ofstream & file, char const* format, char co
 
 int _tmain(int argc, _TCHAR* argv[])
 {
-	//Blog: how to get unit vectors rotated around the origin
-	// look at largest angle increment
-	// mean angle increment
-	// average distance of vector from unit length
-
 	//Example 1: Rotating vector with lambda iterator
 	//benefits:
 	//	-versatile, can pass any worker into angleIterator
 	//	-no memory storage
 	//alternatives:
 	//	-populate an std::vector with the values and then iterate. Excessive memory usage
-	//http://stackoverflow.com/questions/3162643/proper-trigonometry-for-rotating-a-point-around-the-origin
-
+	
 	std::ofstream outfile("results.markdown");
 	//link TOC so we can put a link back at the beginning of each header
 	outfile << "[TOC]\n";
