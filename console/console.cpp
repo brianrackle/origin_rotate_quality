@@ -129,7 +129,6 @@ int _tmain(int argc, _TCHAR* argv[])
 		double maxDelta;
 
 		//could also store delta of every-1 angle and make a 1d heatmap out of it
-
 		auto rotationIterator =
 			[](std::function<void(Coord2D const&)> func)
 			-> std::chrono::nanoseconds
