@@ -117,8 +117,6 @@ std::chrono::nanoseconds polar_iteration
 	return time::now() - start;
 };
 
-//complex number rotation
-
 /* string conversion */
 
 //convert double to string
