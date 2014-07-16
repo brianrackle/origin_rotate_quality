@@ -24,22 +24,28 @@ struct Line
 	Coord2D from;
 };
 
+namespace func_def
+{
+	using angle = std::function < double_t(Coord2D const& vector) >;
+	using iteration = std::function < std::chrono::nanoseconds(double_t const, angle const&) >;
+}
+
 /* math */
-using angle = std::function<double_t(Coord2D const& vector)>;
+
 //Calculate the angle of the vector to the horizontal.
-__forceinline double_t dot_angle(Coord2D const& vector)
+ double_t dot_angle(Coord2D const& vector)
 {
 	return vector.x / std::hypot(vector.x, vector.y);
 }
 
 //Calculate the angle of the vector to the horizontal using atan2.
-__forceinline double_t trig_angle(Coord2D const& line)
+ double_t trig_angle(Coord2D const& line)
 {
 	return 	std::atan2(line.y, line.x);
 }
 
 //Apply rotation matrix to the vector using radians
-__forceinline void rotate(Coord2D & vector, double_t radians)
+void rotate(Coord2D & vector, double_t radians)
 {
 	double_t s = std::sin(radians);
 	double_t c = std::cos(radians);
@@ -48,19 +54,18 @@ __forceinline void rotate(Coord2D & vector, double_t radians)
 }
 
 //increment lhs by rhs
-__forceinline void increment_value(double_t & lhs, double_t const& rhs)
+void increment_value(double_t & lhs, double_t const& rhs)
 {
 	lhs += rhs;
 }
 
 /* iteration */
-using iteration =
-std::function<std::chrono::nanoseconds(double_t const, angle const&)>;
+
 
 //iterate through all the values between 0 and M_PI * 2 at increment intervals
 //at each interval create a vector at the interval value and pass the vector to func
 std::chrono::nanoseconds rotation_iteration
-(double_t const increment, std::function<void(Coord2D const&)> const& func)
+(double_t const increment, func_def::angle const& func)
 {
 	using time = std::chrono::high_resolution_clock;
 	std::chrono::nanoseconds duration;
@@ -78,7 +83,7 @@ std::chrono::nanoseconds rotation_iteration
 //iterate through all the values between 0 and M_PI * 2 at increment intervals
 //at each interval create a vector at the interval value and pass the vector to func
 std::chrono::nanoseconds polar_iteration
-(double_t const increment, std::function<void(Coord2D const&)> const& func)
+(double_t const increment, func_def::angle const& func)
 {
 	using time = std::chrono::high_resolution_clock;
 	std::chrono::nanoseconds duration;
@@ -92,7 +97,7 @@ std::chrono::nanoseconds polar_iteration
 /* string conversion */
 
 //convert double to string
-__forceinline std::string dts(double_t d)
+ std::string dts(double_t d)
 {
 	char buf[50];
 	sprintf_s(buf, "%.16f", d);
@@ -100,24 +105,18 @@ __forceinline std::string dts(double_t d)
 }
 
 //convert Coord2d to string
-__forceinline std::string cts(Coord2D const& vector)
+ std::string cts(Coord2D const& vector)
 {
 	return dts(vector.x) + " , " + dts(vector.y);
 }
 
-//create markdown table header
-__forceinline void table_header(std::ofstream & file, char const* format, char const* headers...)
+void table_header(std::ofstream & file, char const* format)
 {
-	va_list args;
-	va_start(args, format);
-	for (char const* pos = format; *pos; ++pos)
-		file << "| " << va_arg(args, char const*) << " ";
 	file << "|\n";
-	va_end(args);
 
 	for (char const* pos = format; *pos; ++pos)
 		switch (*pos)
-		{
+	{
 		case 'l':
 			file << "|:--- ";
 			break;
@@ -129,23 +128,33 @@ __forceinline void table_header(std::ofstream & file, char const* format, char c
 			break;
 		default:
 			break;
-		}
+	}
+	file << "|\n";
+}
+
+//create markdown table header
+template<typename ... Types>
+void table_header(std::ofstream & file, char const* format, char const * first, Types ... rest)
+{
+	file << "| " << first << " ";
+	table_header(file, format, rest...);
+}
+
+void table_row(std::ofstream & file)
+{
 	file << "|\n";
 }
 
 //create markdown table row
-__forceinline void table_row(std::ofstream & file, int const count, char const* items...)
+template <typename ... Types>
+void table_row(std::ofstream & file, char const* first, Types ... rest)
 {
-	va_list args;
-	va_start(args, count);
-	for (int i = 0; i < count; ++i)
-		file << "| " << va_arg(args, char const*) << " ";
-	file << "|\n";
-	va_end(args);
+	file << "| " << first << " ";
+	table_row(file, rest...);
 }
 
 //create markdown heading
-__forceinline void heading(std::ofstream & file, int const level, char const* head)
+void heading(std::ofstream & file, int const level, char const* head)
 {
 	for (int i = 0; i < level; ++i)
 		file << "#";
@@ -154,39 +163,41 @@ __forceinline void heading(std::ofstream & file, int const level, char const* he
 
 
 //output angles and stats using iteration functon
-__forceinline void calculation_block
-(std::ofstream & outfile, double_t const increment, iteration const& itrn, angle const& itrbl)
+void calculation_block
+(std::ofstream & outfile, double_t const increment, func_def::iteration const& itrn, func_def::angle const& calcAngle)
 {
-	double_t count = 0;
-	double_t sum = 0;
+	size_t count = 0;
+	double_t sumDelta = 0;
 	double_t minDelta = std::numeric_limits<double_t>::max();
 	double_t maxDelta = std::numeric_limits<double_t>::lowest();
-	double_t trueAngle = 0;
 
-	auto duration = itrn(increment, [&](Coord2D const& vector)
+	auto duration = itrn(increment, [&](Coord2D const& vector) -> double_t
 	{
-		trueAngle += increment;
-		double_t angle = itrbl(vector);
-		sum += angle;
+		double_t angle = calcAngle(vector);
+		double_t trueAngle = increment * count;
 
-		if (count != 0)
-		{
-			double_t delta = trueAngle - angle;
-			if (minDelta > delta)
-				minDelta = delta;
-			if (maxDelta < delta)
-				maxDelta = delta;
-		}
-		table_row(outfile, 4,
+		table_row(outfile,
 			std::to_string(count).c_str(),
 			cts(vector).c_str(),
 			dts(angle).c_str(),
 			dts(trueAngle).c_str());
 
+		if (count != 0)
+		{
+			double_t delta = trueAngle - angle;
+			sumDelta += delta;
+			if (minDelta > delta)
+				minDelta = delta;
+			if (maxDelta < delta)
+				maxDelta = delta;
+		}
+
 		++count;
+		return angle;
 	}).count();
+
 	heading(outfile, 3, ("Duration: " + std::to_string(duration) + " ns").c_str());
-	heading(outfile, 3, ("Mean: " + dts(sum / count)).c_str());
+	heading(outfile, 3, ("Mean Delta: " + dts(sumDelta / count)).c_str());
 	heading(outfile, 3, ("Min Delta: " + dts(minDelta)).c_str());
 	heading(outfile, 3, ("Max Delta: " + dts(maxDelta)).c_str());
 }
@@ -202,41 +213,33 @@ int _tmain(int argc, _TCHAR* argv[])
 
 	heading(outfile, 1, "Vector Rotation");
 	heading(outfile, 2, "Dot Results");
-	table_header(outfile, "lr", "Vector", "Radians");
+	table_header(outfile, "lrrr", "Count", "Vector", "Calced Angle", "True Angle");
 	calculation_block(outfile, increment,
-		rotation_iteration, [](Coord2D const& vector){ return std::acos(dot_angle(vector)); });
+		rotation_iteration, [](Coord2D const& vector)
+		{ return std::acos(dot_angle(vector)); });
 	outfile << "[back to top](#toc)" << "\n\n";
 
-	//heading(outfile, 2, "Trig Results");
-	//table_header(outfile, "lr", "Vector", "Radians");
-	//calculation_block(outfile, increment,
-	//	rotation_iteration(increment, [&](Coord2D const& vector)
-	//{ 
-	//	table_row(outfile, 2, cts(vector).c_str(), 
-	//		dts(trig_angle(vector)).c_str());
-	//}));
-	//outfile << "[back to top](#toc)" << "\n\n";
+	heading(outfile, 2, "Trig Results");
+	table_header(outfile, "lrrr", "Count", "Vector", "Calced Angle", "True Angle");
+	calculation_block(outfile, increment,
+		rotation_iteration, [&](Coord2D const& vector)
+		{ return trig_angle(vector); });
+	outfile << "[back to top](#toc)" << "\n\n";
 
-	//heading(outfile, 1, "Polar Rotation");
-	//heading(outfile, 2, "Dot Results");
-	//table_header(outfile, "lr", "Vector", "Radians");
-	//calculation_block(outfile, increment,
-	//	polar_iteration(increment, [&](Coord2D const& vector)
-	//{
-	//	table_row(outfile, 2, cts(vector).c_str(), 
-	//		dts(std::acos(dot_angle(vector))).c_str());
-	//}));
-	//outfile << "[back to top](#toc)" << "\n\n";
+	heading(outfile, 1, "Polar Rotation");
+	heading(outfile, 2, "Dot Results");
+	table_header(outfile, "lrrr", "Count", "Vector", "Calced Angle", "True Angle");
+	calculation_block(outfile, increment,
+		polar_iteration, [&](Coord2D const& vector)
+	{ return std::acos(dot_angle(vector)); });
+	outfile << "[back to top](#toc)" << "\n\n";
 
-	//heading(outfile, 2, "Trig Results");
-	//table_header(outfile, "lr", "Vector", "Radians");
-	//calculation_block(outfile, increment,
-	//	polar_iteration(increment, [&](Coord2D const& vector)
-	//{
-	//	table_row(outfile, 2, cts(vector).c_str(),
-	//		dts(trig_angle(vector)).c_str());
-	//}));
-	//outfile << "[back to top](#toc)" << "\n\n";
+	heading(outfile, 2, "Trig Results");
+	table_header(outfile, "lrrr", "Count", "Vector", "Calced Angle", "True Angle");
+	calculation_block(outfile, increment,
+		polar_iteration, [&](Coord2D const& vector)
+	{ return trig_angle(vector); });
+	outfile << "[back to top](#toc)" << "\n\n";
 
 	return EXIT_SUCCESS;
 }
