@@ -10,6 +10,7 @@
 #include <functional>
 #include <fstream>
 #include <cstdarg>
+#include <string>
 
 struct Coord2D
 {
@@ -56,7 +57,8 @@ __forceinline void increment_value(double_t & lhs, double_t const& rhs)
 
 //iterate through all the values between 0 and M_PI * 2 at increment intervals
 //at each interval create a vector at the interval value and pass the vector to func
-std::chrono::nanoseconds rotation_iteration(double_t const increment, std::function<void(Coord2D const&)> const& func)
+std::chrono::nanoseconds rotation_iteration
+(double_t const increment, std::function<void(Coord2D const&)> const& func)
 {
 	using time = std::chrono::high_resolution_clock;
 	std::chrono::nanoseconds duration;
@@ -73,7 +75,8 @@ std::chrono::nanoseconds rotation_iteration(double_t const increment, std::funct
 
 //iterate through all the values between 0 and M_PI * 2 at increment intervals
 //at each interval create a vector at the interval value and pass the vector to func
-std::chrono::nanoseconds polar_iteration(double_t const increment, std::function<void(Coord2D const&)> const& func)
+std::chrono::nanoseconds polar_iteration
+(double_t const increment, std::function<void(Coord2D const&)> const& func)
 {
 	using time = std::chrono::high_resolution_clock;
 	std::chrono::nanoseconds duration;
@@ -131,58 +134,78 @@ __forceinline void table_header(std::ofstream & file, char const* format, char c
 //create markdown table row
 __forceinline void table_row(std::ofstream & file, int const count, char const* items...)
 {
+	va_list args;
+	va_start(args, count);
 	for (int i = 0; i < count; ++i)
-		file << "| " << items << " ";
+		file << "| " << va_arg(args, char const*) << " ";
 	file << "|\n";
+	va_end(args);
+}
+
+__forceinline void heading(std::ofstream & file, int const level, char const* head)
+{
+	for (int i = 0; i < level; ++i)
+		file << "#";
+	file << " " << head << "\n";
 }
 
 int _tmain(int argc, _TCHAR* argv[])
 {
 	std::ofstream outfile("results.markdown");
-	//link TOC so we can put a link back at the beginning of each header
+	
 	outfile << "<a name = \"toc\"></a>"
 		<< "\n\n[TOC]\n\n";
 
 	const double_t increment = 1.0e-2;
 
+	//delta calculated angle to i 
 	double count;
 	double sum;
 	double mean;
 	double minDelta;
 	double maxDelta;
 
-	outfile << "# Vector Rotation\n";
-
-	outfile << "## " << "Dot Results\n";
+	heading(outfile, 1, "Vector Rotation");
+	heading(outfile, 2, "Dot Results");
 	table_header(outfile, "lr", "Vector", "Radians");
-	outfile << "### Duration: " << rotation_iteration(increment, [&](Coord2D const& vector)
-	{ 
-		table_row(outfile, 2, cts(vector).c_str(), dts(std::acos(dot_angle(vector))).c_str());
-	}).count() << "ns\n\n";
-
-	outfile << "## " << "Trig Results\n";
-	table_header(outfile, "lr", "Vector", "Radians");
-	outfile << "### Duration: " << rotation_iteration(increment, [&](Coord2D const& vector)
-	{ 
-		table_row(outfile, 2, cts(vector).c_str(), dts(trig_angle(vector)).c_str());
-	}).count() << "ns\n\n";
-
-	outfile << "# Polar Rotation\n";
-
-	outfile << "## " << "Dot Results\n";
-	table_header(outfile, "lr", "Vector", "Radians");
-	outfile << "### Duration: " << polar_iteration(increment, [&](Coord2D const& vector)
+	heading(outfile, 3, ("Duration: " + std::to_string(
+		rotation_iteration(increment, [&](Coord2D const& vector)
 	{
-		table_row(outfile, 2, cts(vector).c_str(), dts(std::acos(dot_angle(vector))).c_str());
-	}).count() << "ns\n";
+		table_row(outfile, 2, cts(vector).c_str(), 
+			dts(std::acos(dot_angle(vector))).c_str());
+	}).count()) + "ns\n").c_str());
+	outfile << "[back to top](#toc)" << "\n\n";
 
-	outfile << "## " << "Trig Results\n";
+	heading(outfile, 2, "Trig Results");
 	table_header(outfile, "lr", "Vector", "Radians");
-	outfile << "### Duration: " << polar_iteration(increment, [&](Coord2D const& vector)
+	heading(outfile, 3, ("Duration: " + std::to_string(
+		rotation_iteration(increment, [&](Coord2D const& vector)
+	{ 
+		table_row(outfile, 2, cts(vector).c_str(), 
+			dts(trig_angle(vector)).c_str());
+	}).count()) + "ns\n").c_str());
+	outfile << "[back to top](#toc)" << "\n\n";
+
+	heading(outfile, 1, "Polar Rotation");
+	heading(outfile, 2, "Dot Results");
+	table_header(outfile, "lr", "Vector", "Radians");
+	heading(outfile, 3, ("Duration: " + std::to_string(
+		polar_iteration(increment, [&](Coord2D const& vector)
 	{
-		table_row(outfile, 2, cts(vector).c_str(), dts(trig_angle(vector)).c_str());
-	}).count() << "ns\n";
-	outfile << "[back to top](#toc)" << std::endl;
+		table_row(outfile, 2, cts(vector).c_str(), 
+			dts(std::acos(dot_angle(vector))).c_str());
+	}).count()) + "ns\n").c_str());
+	outfile << "[back to top](#toc)" << "\n\n";
+
+	heading(outfile, 2, "Trig Results");
+	table_header(outfile, "lr", "Vector", "Radians");
+	heading(outfile, 3, ("Duration: " + std::to_string(
+		polar_iteration(increment, [&](Coord2D const& vector)
+	{
+		table_row(outfile, 2, cts(vector).c_str(), 
+			dts(trig_angle(vector)).c_str());
+	}).count()) + "ns\n").c_str());
+	outfile << "[back to top](#toc)" << "\n\n";
 	return EXIT_SUCCESS;
 }
 
