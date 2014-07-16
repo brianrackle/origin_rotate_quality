@@ -27,19 +27,19 @@ struct Line
 /* math */
 
 //Calculate the angle of the vector to the horizontal.
-__forceinline double_t dot_angle(Coord2D const& vector)
+double_t dot_angle(Coord2D const& vector)
 {
 	return vector.x / std::hypot(vector.x, vector.y);
 }
 
 //Calculate the angle of the vector to the horizontal using atan2.
-__forceinline double_t trig_angle(Coord2D const& line)
+double_t trig_angle(Coord2D const& line)
 {
 	return 	std::atan2(line.y, line.x);
 }
 
 //Apply rotation matrix to the vector using radians
-__forceinline void rotate(Coord2D & vector, double_t radians)
+void rotate(Coord2D & vector, double_t radians)
 {
 	double_t s = std::sin(radians);
 	double_t c = std::cos(radians);
@@ -48,7 +48,7 @@ __forceinline void rotate(Coord2D & vector, double_t radians)
 }
 
 //increment lhs by rhs
-__forceinline void increment_value(double_t & lhs, double_t const& rhs)
+void increment_value(double_t & lhs, double_t const& rhs)
 {
 	lhs += rhs;
 }
@@ -90,7 +90,7 @@ std::chrono::nanoseconds polar_iteration
 /* string conversion */
 
 //convert double to string
-__forceinline std::string dts(double_t d)
+std::string dts(double_t d)
 {
 	char buf[50];
 	sprintf_s(buf, "%.16f", d);
@@ -98,24 +98,18 @@ __forceinline std::string dts(double_t d)
 }
 
 //convert Coord2d to string
-__forceinline std::string cts(Coord2D const& vector)
+std::string cts(Coord2D const& vector)
 {
 	return dts(vector.x) + " , " + dts(vector.y);
 }
 
-//create markdown table header
-__forceinline void table_header(std::ofstream & file, char const* format, char const* headers...)
+void table_header(std::ofstream & file, char const* format)
 {
-	va_list args;
-	va_start(args, format);
-	for (char const* pos = format; *pos; ++pos)
-		file << "| " << va_arg(args, char const*) << " ";
 	file << "|\n";
-	va_end(args);
 
 	for (char const* pos = format; *pos; ++pos)
 		switch (*pos)
-		{
+	{
 		case 'l':
 			file << "|:--- ";
 			break;
@@ -127,22 +121,32 @@ __forceinline void table_header(std::ofstream & file, char const* format, char c
 			break;
 		default:
 			break;
-		}
+	}
+	file << "|\n";
+}
+
+//create markdown table header
+template<typename ... Types>
+void table_header(std::ofstream & file, char const* format, char const * first, Types ... rest)
+{
+	file << "| " << first << " ";
+	table_header(file, format, rest...);
+}
+
+void table_row(std::ofstream & file)
+{
 	file << "|\n";
 }
 
 //create markdown table row
-__forceinline void table_row(std::ofstream & file, int const count, char const* items...)
+template <typename ... Types>
+void table_row(std::ofstream & file, char const* first, Types ... rest)
 {
-	va_list args;
-	va_start(args, count);
-	for (int i = 0; i < count; ++i)
-		file << "| " << va_arg(args, char const*) << " ";
-	file << "|\n";
-	va_end(args);
+	file << "| " << first << " ";
+	table_row(file, rest...);
 }
 
-__forceinline void heading(std::ofstream & file, int const level, char const* head)
+void heading(std::ofstream & file, int const level, char const* head)
 {
 	for (int i = 0; i < level; ++i)
 		file << "#";
@@ -156,7 +160,7 @@ int _tmain(int argc, _TCHAR* argv[])
 	outfile << "<a name = \"toc\"></a>"
 		<< "\n\n[TOC]\n\n";
 
-	const double_t increment = 1.0e-2;
+	const double_t increment = 1.0e-5;
 
 	//delta calculated angle to i 
 	double count;
@@ -171,7 +175,7 @@ int _tmain(int argc, _TCHAR* argv[])
 	heading(outfile, 3, ("Duration: " + std::to_string(
 		rotation_iteration(increment, [&](Coord2D const& vector)
 	{
-		table_row(outfile, 2, cts(vector).c_str(), 
+		table_row(outfile, cts(vector).c_str(), 
 			dts(std::acos(dot_angle(vector))).c_str());
 	}).count()) + "ns\n").c_str());
 	outfile << "[back to top](#toc)" << "\n\n";
@@ -181,7 +185,7 @@ int _tmain(int argc, _TCHAR* argv[])
 	heading(outfile, 3, ("Duration: " + std::to_string(
 		rotation_iteration(increment, [&](Coord2D const& vector)
 	{ 
-		table_row(outfile, 2, cts(vector).c_str(), 
+		table_row(outfile, cts(vector).c_str(), 
 			dts(trig_angle(vector)).c_str());
 	}).count()) + "ns\n").c_str());
 	outfile << "[back to top](#toc)" << "\n\n";
@@ -192,7 +196,7 @@ int _tmain(int argc, _TCHAR* argv[])
 	heading(outfile, 3, ("Duration: " + std::to_string(
 		polar_iteration(increment, [&](Coord2D const& vector)
 	{
-		table_row(outfile, 2, cts(vector).c_str(), 
+		table_row(outfile, cts(vector).c_str(), 
 			dts(std::acos(dot_angle(vector))).c_str());
 	}).count()) + "ns\n").c_str());
 	outfile << "[back to top](#toc)" << "\n\n";
@@ -202,7 +206,7 @@ int _tmain(int argc, _TCHAR* argv[])
 	heading(outfile, 3, ("Duration: " + std::to_string(
 		polar_iteration(increment, [&](Coord2D const& vector)
 	{
-		table_row(outfile, 2, cts(vector).c_str(), 
+		table_row(outfile, cts(vector).c_str(), 
 			dts(trig_angle(vector)).c_str());
 	}).count()) + "ns\n").c_str());
 	outfile << "[back to top](#toc)" << "\n\n";
