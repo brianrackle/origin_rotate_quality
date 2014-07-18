@@ -12,108 +12,99 @@
 #include <cstdarg>
 #include <string>
 
-struct Coord2D
+struct coord2d
 {
 	double_t x;
 	double_t y;
 };
 
-struct Line
-{
-	Coord2D to;
-	Coord2D from;
-};
-
 namespace func_def
 {
-	using angle = std::function < double_t(Coord2D const& vector) >;
-	using range = std::function < double_t(double_t const) > ;
-	using iteration = std::function < std::chrono::nanoseconds(double_t const, angle const&) >;
+	using theta = std::function < double_t(coord2d const&) >;
+	using clamp = std::function < double_t(double_t const) >;
+	using iterable = std::function < void(coord2d const&, double_t const) >;
+	using iterate = std::function < std::chrono::nanoseconds(double_t const, iterable const&) >;
 }
 
 /* math */
 
-//Calculate the angle of the vector to the horizontal.
- double_t dot_angle(Coord2D const& vector)
+//Calculate the theta of the vector to the horizontal.
+ double_t dot_theta(coord2d const& vector)
 {
 	 return std::acos(vector.x / std::hypot(vector.x, vector.y));
 }
 
- double_t dot_range(double_t const angle)
+ double_t dot_clamp(double_t const theta)
  {
-	 return angle > M_PI ? (2 * M_PI) - angle : angle;	 
+	 return theta > M_PI ? (2 * M_PI) - theta : theta;	 
  }
 
-//Calculate the angle of the vector to the horizontal using atan2.
- double_t trig_angle(Coord2D const& line)
+//Calculate the theta of the vector to the horizontal using atan2.
+ double_t trig_theta(coord2d const& line)
 {
 	return 	std::atan2(line.y, line.x);
 }
 
- double_t trig_range(double_t const angle)
+ double_t trig_clamp(double_t const theta)
  {
-	 return angle > M_PI ? -((2 * M_PI) - angle) : angle;
+	 return theta > M_PI ? -((2 * M_PI) - theta) : theta;
  }
 
-//Apply rotation matrix to the vector using radians
-Coord2D rotate(Coord2D const& vector, double_t const radians)
+//Apply rotation matrix to the vector using theta
+coord2d rotate(coord2d const& vector, double_t const theta)
 {
-	double_t s = std::sin(radians);
-	double_t c = std::cos(radians);
+	double_t s = std::sin(theta);
+	double_t c = std::cos(theta);
 
 	return { vector.x * c - vector.y * s, vector.x * s + vector.y * c };
 }
 
-//increment lhs by rhs
-void increment_value(double_t & lhs, double_t const& rhs)
-{
-	lhs += rhs;
-}
-
-/* iteration */
+/* iterate */
 
 std::chrono::nanoseconds rotation_iteration
-(double_t const increment, func_def::angle const& func)
+(double_t const increment, func_def::iterable const& iterable)
 {
 	using time = std::chrono::high_resolution_clock;
 	std::chrono::nanoseconds duration;
 
 	auto start = time::now();
-	for (double_t i = 0; i <= M_PI * 2; increment_value(i, increment))
-		func(rotate({ 1, 0 }, i > M_PI ? -((2 * M_PI) - i) : i));
-
+	double_t theta = 0;
+	for (size_t i = 0; (theta = i*increment) <= M_PI * 2; ++i)
+		iterable(rotate({ 1, 0 }, theta), theta);
 	return time::now() - start;
 };
 
 //iterate through all the values between 0 and M_PI * 2 at increment intervals
-//at each interval create a vector at the interval value and pass the vector to func
+//at each interval create a vector at the interval value and pass the vector to iterable
 std::chrono::nanoseconds rotation_inc_iteration
-(double_t const increment, func_def::angle const& func)
+(double_t const increment, func_def::iterable const& iterable)
 {
 	using time = std::chrono::high_resolution_clock;
 	std::chrono::nanoseconds duration;
 
-	Coord2D vector = { 1, 0 };
+	coord2d vector = { 1, 0 };
 	auto start = time::now();
-	for (double_t i = 0; i <= M_PI * 2; increment_value(i, increment))
+	double_t theta = 0;
+	for (size_t i = 0; (theta = i*increment) <= M_PI * 2; ++i)
 	{
-		func(vector);
+		iterable(vector, theta);
 		vector = rotate(vector, increment);
 	}
 	return time::now() - start;
 };
 
 //iterate through all the values between 0 and M_PI * 2 at increment intervals
-//at each interval create a vector at the interval value and pass the vector to func
+//at each interval create a vector at the interval value and pass the vector to iterable
 std::chrono::nanoseconds polar_iteration
-(double_t const increment, func_def::angle const& func)
+(double_t const increment, func_def::iterable const& iterable)
 {
 	using time = std::chrono::high_resolution_clock;
 	std::chrono::nanoseconds duration;
 
 	auto start = time::now();
-	for (double_t i = 0; i <= M_PI * 2; increment_value(i, increment))
-		func({ std::cos(i), std::sin(i) });
+	double_t theta = 0;
+	for (size_t i = 0; (theta = i*increment) <= M_PI * 2; ++i)
+		iterable({ std::cos(theta), std::sin(theta) }, theta);
 	return time::now() - start;
 };
 
@@ -127,8 +118,8 @@ std::chrono::nanoseconds polar_iteration
 	return buf;
 }
 
-//convert Coord2d to string
- std::string cts(Coord2D const& vector)
+//convert coord2d to string
+ std::string cts(coord2d const& vector)
 {
 	return dts(vector.x) + " , " + dts(vector.y);
 }
@@ -183,23 +174,22 @@ void heading(std::ofstream & file, int const level, char const* head)
 		file << "#";
 	file << " " << head << "\n";
 }
-
-
-//output angles and stats using iteration functon
+//pass the theta to the func_def::iterate function so that the theta used to calculate the vector can be used for comparison
+//output thetas and stats using iterate functon
 void calculation_block
-(std::ofstream & outfile, double_t const increment, func_def::iteration const& itrn, func_def::angle const& calcAngle, func_def::range const& calcRange)
+(std::ofstream & outfile, double_t const increment, func_def::iterate const& iterate, func_def::theta const& calc_theta, func_def::clamp const& clamp)
 {
 	size_t count = 0;
 	double_t sumDelta = 0;
 	double_t minDelta = std::numeric_limits<double_t>::max();
 	double_t maxDelta = std::numeric_limits<double_t>::lowest();
 
-	auto duration = itrn(increment, [&](Coord2D const& vector) -> double_t
+	auto duration = iterate(increment, [&](coord2d const& vector, double_t const theta)
 	{
-		double_t angle = calcAngle(vector);
-		double_t trueAngle = calcRange(increment * count);
+		double_t calced_theta = calc_theta(vector);
+		double_t clamped_theta = clamp(theta);
 		
-		double_t delta = std::abs(trueAngle - angle);
+		double_t delta = std::abs(clamped_theta - calced_theta);
 		if (count != 0)
 		{
 			sumDelta += delta;
@@ -212,13 +202,11 @@ void calculation_block
 		table_row(outfile,
 			std::to_string(count).c_str(),
 			cts(vector).c_str(),
-			dts(angle).c_str(),
-			dts(trueAngle).c_str(),
+			dts(calced_theta).c_str(),
+			dts(clamped_theta).c_str(),
 			dts(delta).c_str());
 
-
 		++count;
-		return angle;
 	}).count();
 
 	heading(outfile, 3, ("Duration: " + std::to_string(duration) + " ns").c_str());
@@ -238,35 +226,35 @@ int _tmain(int argc, _TCHAR* argv[])
 
 	heading(outfile, 1, "Rotation");
 	heading(outfile, 2, "Dot Results");
-	table_header(outfile, "lcrrr", "Count", "Vector", "Calced Angle", "True Angle", "Delta");
-	calculation_block(outfile, increment, rotation_iteration, dot_angle, dot_range);
+	table_header(outfile, "lcrrr", "Count", "Vector", "Calced Theta", "True Theta", "Delta");
+	calculation_block(outfile, increment, rotation_iteration, dot_theta, dot_clamp);
 	outfile << "[back to top](#toc)" << "\n\n";
 
 	heading(outfile, 2, "Trig Results");
-	table_header(outfile, "lcrrr", "Count", "Vector", "Calced Angle", "True Angle", "Delta");
-	calculation_block(outfile, increment, rotation_iteration, trig_angle, trig_range);
+	table_header(outfile, "lcrrr", "Count", "Vector", "Calced Theta", "True Theta", "Delta");
+	calculation_block(outfile, increment, rotation_iteration, trig_theta, trig_clamp);
 	outfile << "[back to top](#toc)" << "\n\n";
 
 	heading(outfile, 1, "Incremental Rotation");
 	heading(outfile, 2, "Dot Results");
-	table_header(outfile, "lcrrr", "Count", "Vector", "Calced Angle", "True Angle", "Delta");
-	calculation_block(outfile, increment, rotation_inc_iteration, dot_angle, dot_range);
+	table_header(outfile, "lcrrr", "Count", "Vector", "Calced Theta", "True Theta", "Delta");
+	calculation_block(outfile, increment, rotation_inc_iteration, dot_theta, dot_clamp);
 	outfile << "[back to top](#toc)" << "\n\n";
 
 	heading(outfile, 2, "Trig Results");
-	table_header(outfile, "lcrrr", "Count", "Vector", "Calced Angle", "True Angle", "Delta");
-	calculation_block(outfile, increment, rotation_inc_iteration, trig_angle, trig_range);
+	table_header(outfile, "lcrrr", "Count", "Vector", "Calced Theta", "True Theta", "Delta");
+	calculation_block(outfile, increment, rotation_inc_iteration, trig_theta, trig_clamp);
 	outfile << "[back to top](#toc)" << "\n\n";
 
 	heading(outfile, 1, "Polar Rotation");
 	heading(outfile, 2, "Dot Results");
-	table_header(outfile, "lcrrr", "Count", "Vector", "Calced Angle", "True Angle", "Delta");
-	calculation_block(outfile, increment, polar_iteration, dot_angle, dot_range);
+	table_header(outfile, "lcrrr", "Count", "Vector", "Calced Theta", "True Theta", "Delta");
+	calculation_block(outfile, increment, polar_iteration, dot_theta, dot_clamp);
 	outfile << "[back to top](#toc)" << "\n\n";
 
 	heading(outfile, 2, "Trig Results");
-	table_header(outfile, "lcrrr", "Count", "Vector", "Calced Angle", "True Angle", "Delta");
-	calculation_block(outfile, increment, polar_iteration, trig_angle, trig_range);
+	table_header(outfile, "lcrrr", "Count", "Vector", "Calced Theta", "True Theta", "Delta");
+	calculation_block(outfile, increment, polar_iteration, trig_theta, trig_clamp);
 	outfile << "[back to top](#toc)" << "\n\n";
 
 	return EXIT_SUCCESS;
