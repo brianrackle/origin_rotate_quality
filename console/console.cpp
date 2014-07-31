@@ -11,6 +11,8 @@
 #include <fstream>
 #include <cstdarg>
 #include <string>
+#include <rapidxml/rapidxml.hpp>
+#include <rapidxml/rapidxml_print.hpp>
 
 struct coord2d
 {
@@ -111,73 +113,41 @@ std::chrono::nanoseconds polar_iteration
 /* string conversion */
 
 //convert double to string
- std::string dts(double_t d)
+ std::string to_string(double_t d)
 {
 	char buf[50];
 	sprintf_s(buf, "%.16f", d);
-	return buf;
+	return std::string(buf);
 }
 
-//convert coord2d to string
- std::string cts(coord2d const& vector)
+void append_attribute(rapidxml::xml_document<> &doc, rapidxml::xml_node<> * node, std::pair<std::string const, std::string const>  const& attribute)
 {
-	return dts(vector.x) + " , " + dts(vector.y);
+	node->append_attribute(doc.allocate_attribute(doc.allocate_string(attribute.first.c_str()), doc.allocate_string(attribute.second.c_str())));
 }
 
-void table_header(std::ofstream & file, char const* format)
-{
-	file << "|\n";
-
-	for (char const* pos = format; *pos; ++pos)
-		switch (*pos)
-	{
-		case 'l':
-			file << "|:--- ";
-			break;
-		case 'r':
-			file << "| ---:";
-			break;
-		case 'c':
-			file << "|:---:";
-			break;
-		default:
-			break;
-	}
-	file << "|\n";
-}
-
-//create markdown table header
-template<typename ... Types>
-void table_header(std::ofstream & file, char const* format, char const * first, Types ... rest)
-{
-	file << "| " << first << " ";
-	table_header(file, format, rest...);
-}
-
-void table_row(std::ofstream & file)
-{
-	file << "|\n";
-}
-
-//create markdown table row
 template <typename ... Types>
-void table_row(std::ofstream & file, char const* first, Types ... rest)
+void append_attribute(rapidxml::xml_document<> &doc, rapidxml::xml_node<> * node, std::pair<std::string const, std::string const>  const& attribute, Types const& ... attributes)
 {
-	file << "| " << first << " ";
-	table_row(file, rest...);
+	append_attribute(doc, node, attribute);
+	append_attribute(doc, node, attributes...);
 }
 
-//create markdown heading
-void heading(std::ofstream & file, int const level, char const* head)
+rapidxml::xml_node<> * append_node(rapidxml::xml_document<> &doc, char const* node_name)
 {
-	for (int i = 0; i < level; ++i)
-		file << "#";
-	file << " " << head << "\n";
+	return doc.allocate_node(rapidxml::node_element, doc.allocate_string(node_name));
 }
-//pass the theta to the func_def::iterate function so that the theta used to calculate the vector can be used for comparison
-//output thetas and stats using iterate functon
+
+template <typename ... Types>
+rapidxml::xml_node<> * append_node(rapidxml::xml_document<> &doc, char const* node_name, std::pair<std::string const, std::string const>  const& attribute, Types const& ... attributes)
+{
+	rapidxml::xml_node<> *node = append_node(doc, doc.allocate_string(node_name));
+	append_attribute(doc, node, attribute, attributes...);
+	return node;
+}
+
+template <typename T>
 void calculation_block
-(std::ofstream & outfile, double_t const increment, func_def::iterate const& iterate, func_def::theta const& calc_theta, func_def::clamp const& clamp)
+(T & out, rapidxml::xml_node<> * parent, double_t const increment, func_def::iterate const& iterate, func_def::theta const& calc_theta, func_def::clamp const& clamp)
 {
 	size_t count = 0;
 	double_t sumDelta = 0;
@@ -198,66 +168,40 @@ void calculation_block
 			if (maxDelta < delta)
 				maxDelta = delta;
 		}
+		std::string x = to_string(vector.x);
+		std::string y = to_string(vector.y);
+		//scale to output
+		parent->append_node(
+			append_node(out, "line",
+			std::make_pair("x1", "0.0"),
+			std::make_pair("y1", "0.0"),
+			std::make_pair("x2", x),
+			std::make_pair("y2", y),
+			std::make_pair("style", "stroke-width:1;" + 
+			("stroke:rgb(" + std::to_string(255) + ",0,0)"))
+			));
+		//every 255 move left
 
-		table_row(outfile,
-			std::to_string(count).c_str(),
-			cts(vector).c_str(),
-			dts(calced_theta).c_str(),
-			dts(clamped_theta).c_str(),
-			dts(delta).c_str());
-
+		x.clear();
+		y.clear();
 		++count;
 	}).count();
-
-	heading(outfile, 3, ("Duration: " + std::to_string(duration) + " ns").c_str());
-	heading(outfile, 3, ("Mean Delta: " + dts(sumDelta / count)).c_str());
-	heading(outfile, 3, ("Min Delta: " + dts(minDelta)).c_str());
-	heading(outfile, 3, ("Max Delta: " + dts(maxDelta)).c_str());
 }
 
 int _tmain(int argc, _TCHAR* argv[])
 {
-	std::ofstream outfile("results.markdown");
-	
-	outfile << "<a name = \"toc\"></a>"
-		<< "\n\n[TOC]\n\n";
+	std::ofstream outfile("results.svg");
+	rapidxml::xml_document<> doc;
+
+	rapidxml::xml_node<> * svg = append_node(doc, "svg", std::make_pair("att0", "value0"), std::make_pair("att1", "value1"));
+	doc.append_node(svg);
 
 	const double_t increment = 1.0e-2;
 
-	heading(outfile, 1, "Rotation");
-	heading(outfile, 2, "Dot Results");
-	table_header(outfile, "lcrrr", "Count", "Vector", "Calced Theta", "True Theta", "Delta");
-	calculation_block(outfile, increment, rotation_iteration, dot_theta, dot_clamp);
-	outfile << "[back to top](#toc)" << "\n\n";
+	calculation_block(doc, svg, increment, polar_iteration, dot_theta, dot_clamp);
+	calculation_block(doc, svg, increment, polar_iteration, trig_theta, trig_clamp);
 
-	heading(outfile, 2, "Trig Results");
-	table_header(outfile, "lcrrr", "Count", "Vector", "Calced Theta", "True Theta", "Delta");
-	calculation_block(outfile, increment, rotation_iteration, trig_theta, trig_clamp);
-	outfile << "[back to top](#toc)" << "\n\n";
-
-	heading(outfile, 1, "Incremental Rotation");
-	heading(outfile, 2, "Dot Results");
-	table_header(outfile, "lcrrr", "Count", "Vector", "Calced Theta", "True Theta", "Delta");
-	calculation_block(outfile, increment, rotation_inc_iteration, dot_theta, dot_clamp);
-	outfile << "[back to top](#toc)" << "\n\n";
-
-	heading(outfile, 2, "Trig Results");
-	table_header(outfile, "lcrrr", "Count", "Vector", "Calced Theta", "True Theta", "Delta");
-	calculation_block(outfile, increment, rotation_inc_iteration, trig_theta, trig_clamp);
-	outfile << "[back to top](#toc)" << "\n\n";
-
-	heading(outfile, 1, "Polar Rotation");
-	heading(outfile, 2, "Dot Results");
-	table_header(outfile, "lcrrr", "Count", "Vector", "Calced Theta", "True Theta", "Delta");
-	calculation_block(outfile, increment, polar_iteration, dot_theta, dot_clamp);
-	outfile << "[back to top](#toc)" << "\n\n";
-
-	heading(outfile, 2, "Trig Results");
-	table_header(outfile, "lcrrr", "Count", "Vector", "Calced Theta", "True Theta", "Delta");
-	calculation_block(outfile, increment, polar_iteration, trig_theta, trig_clamp);
-	outfile << "[back to top](#toc)" << "\n\n";
+	outfile << doc;
 
 	return EXIT_SUCCESS;
 }
-
-
